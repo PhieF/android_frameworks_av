@@ -92,6 +92,11 @@ static sp<MediaMetadataRetrieverBase> createRetriever(player_type playerType)
             p = new StagefrightMetadataRetriever;
             break;
         }
+        case AW_PLAYER:
+        {
+            p = new AwMetadataRetriever;
+            break;
+        }
         default:
             // TODO:
             // support for TEST_PLAYER
@@ -194,7 +199,7 @@ Mutex MetadataRetrieverClient::sLock;
 
 sp<IMemory> MetadataRetrieverClient::getFrameAtTime(int64_t timeUs, int option)
 {
-    ALOGV("getFrameAtTime: time(%" PRId64 " us) option(%d)", timeUs, option);
+    ALOGV("getFrameAtTime: time(%lld us) option(%d)", (long long)timeUs, option);
     Mutex::Autolock lock(mLock);
     Mutex::Autolock glock(sLock);
     mThumbnail.clear();

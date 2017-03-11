@@ -45,7 +45,6 @@ struct MediaFilter : public CodecBase {
     virtual void signalRequestIDRFrame();
     virtual void signalSetParameters(const sp<AMessage> &msg);
     virtual void signalEndOfInputStream();
-
     virtual void onMessageReceived(const sp<AMessage> &msg);
 
     struct PortDescription : public CodecBase::PortDescription {

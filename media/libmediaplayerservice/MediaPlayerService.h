@@ -472,6 +472,20 @@ private:
                 SortedVector< wp<MediaRecorderClient> > mMediaRecorderClients;
                 int32_t                     mNextConnId;
                 sp<IOMX>                    mOMX;
+
+                /* add by Gary. start {{----------------------------------- */
+                /* 2011-11-14 */
+                /* support adjusting colors while playing video */
+
+                bool                        mGlobalSubGate;  // 2012-03-12, add the global interfaces to control the subtitle gate
+                /* add by Gary. end   -----------------------------------}} */
+
+                /*Start by Bevis. Detect http data source from other application.*/
+                wp<Client> mDetectClient;
+                /*Start by Bevis. Detect http data source from other application.*/
+                /*Add by eric_wang. record hdmi state, 20130318 */
+                static int                  mHdmiPlugged;   //1:hdmi plugin, 0:hdmi plugout
+                /*Add by eric_wang. record hdmi state, 20130318, end ---------- */
 };
 
 // ----------------------------------------------------------------------------

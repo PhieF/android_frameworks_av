@@ -1310,7 +1310,7 @@ MetadataBufferType CameraSource::metaDataStoredInVideoBuffers() const {
     switch (mVideoBufferMode) {
 #ifndef EXYNOS4_ENHANCEMENTS
         case hardware::ICamera::VIDEO_BUFFER_MODE_DATA_CALLBACK_METADATA:
-            return kMetadataBufferTypeNativeHandleSource;
+            return kMetadataBufferTypeCameraSource;
 #endif
         case hardware::ICamera::VIDEO_BUFFER_MODE_BUFFER_QUEUE:
             return kMetadataBufferTypeANWBuffer;

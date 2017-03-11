@@ -88,7 +88,7 @@
 namespace android {
 
 enum {
-    kMaxIndicesToCheck = 64, // used when enumerating supported formats and profiles
+    kMaxIndicesToCheck = 32, // used when enumerating supported formats and profiles
 };
 
 // OMX errors are directly mapped into status_t range if
@@ -1031,6 +1031,7 @@ status_t ACodec::setupNativeWindowSizeFormatAndUsage(
     memset(&mLastNativeWindowCrop, 0, sizeof(mLastNativeWindowCrop));
     mLastNativeWindowDataSpace = HAL_DATASPACE_UNKNOWN;
 
+
 #ifdef USE_SAMSUNG_COLORFORMAT
     OMX_COLOR_FORMATTYPE eNativeColorFormat = def.format.video.eColorFormat;
     setNativeWindowColorFormat(eNativeColorFormat);
@@ -1068,7 +1069,14 @@ status_t ACodec::setupNativeWindowSizeFormatAndUsage(
         }
     }
 #endif
-    return err;
+    return setNativeWindowSizeFormatAndUsage(
+            nativeWindow,
+            def.format.video.nFrameWidth,
+            def.format.video.nFrameHeight,
+            def.format.video.eColorFormat,
+            mRotationDegrees,
+            usage,
+            reconnect);
 }
 
 status_t ACodec::configureOutputBuffersFromNativeWindow(
@@ -1776,6 +1784,30 @@ const char *ACodec::getComponentRole(
             "audio_decoder.flac", "audio_encoder.flac" },
         { MEDIA_MIMETYPE_AUDIO_MSGSM,
             "audio_decoder.gsm", "audio_encoder.gsm" },
+        { MEDIA_MIMETYPE_VIDEO_WMV1,
+            "video_decoder.wmv1", "video_encoder.wmv1" },
+        { MEDIA_MIMETYPE_VIDEO_WMV2,
+            "video_decoder.wmv2", "video_encoder.wmv2" },
+        { MEDIA_MIMETYPE_VIDEO_VC1,
+            "video_decoder.vc1", "video_encoder.vc1" },
+        { MEDIA_MIMETYPE_VIDEO_VP6,
+            "video_decoder.vp6", "video_encoder.vp6" },
+        { MEDIA_MIMETYPE_VIDEO_S263,
+            "video_decoder.s263", "video_encoder.s263" },
+        { MEDIA_MIMETYPE_VIDEO_MJPEG,
+            "video_decoder.mjpeg", "video_encoder.mjpeg" },
+        { MEDIA_MIMETYPE_VIDEO_MPEG1,
+            "video_decoder.mpeg1", "video_encoder.mpeg1" },
+        { MEDIA_MIMETYPE_VIDEO_MSMPEG4V1,
+            "video_decoder.msmpeg4v1", "video_encoder.msmpeg4v1" },
+        { MEDIA_MIMETYPE_VIDEO_MSMPEG4V2,
+            "video_decoder.msmpeg4v2", "video_encoder.msmpeg4v2" },
+        { MEDIA_MIMETYPE_VIDEO_DIVX,
+            "video_decoder.divx", "video_encoder.divx" },
+        { MEDIA_MIMETYPE_VIDEO_XVID,
+            "video_decoder.xvid", "video_encoder.xvid" },
+        { MEDIA_MIMETYPE_VIDEO_RXG2,
+            "video_decoder.rxg2", "video_encoder.rxg2" },
         { MEDIA_MIMETYPE_VIDEO_MPEG2,
             "video_decoder.mpeg2", "video_encoder.mpeg2" },
         { MEDIA_MIMETYPE_AUDIO_AC3,
@@ -3343,7 +3375,19 @@ static const struct VideoCodingMapEntry {
     { MEDIA_MIMETYPE_VIDEO_MPEG2, OMX_VIDEO_CodingMPEG2 },
     { MEDIA_MIMETYPE_VIDEO_VP8, OMX_VIDEO_CodingVP8 },
     { MEDIA_MIMETYPE_VIDEO_VP9, OMX_VIDEO_CodingVP9 },
-    { MEDIA_MIMETYPE_VIDEO_DOLBY_VISION, OMX_VIDEO_CodingDolbyVision },
+    { MEDIA_MIMETYPE_VIDEO_DOLBY_VISION, OMX_VIDEO_CodingDolbyVision },=
+    { MEDIA_MIMETYPE_VIDEO_WMV1, OMX_VIDEO_CodingWMV1},
+    { MEDIA_MIMETYPE_VIDEO_WMV2, OMX_VIDEO_CodingWMV2},
+    { MEDIA_MIMETYPE_VIDEO_VC1, OMX_VIDEO_CodingWMV},
+    { MEDIA_MIMETYPE_VIDEO_VP6, OMX_VIDEO_CodingVP6},
+    { MEDIA_MIMETYPE_VIDEO_S263, OMX_VIDEO_CodingS263},
+    { MEDIA_MIMETYPE_VIDEO_MJPEG, OMX_VIDEO_CodingMJPEG},
+    { MEDIA_MIMETYPE_VIDEO_MPEG1, OMX_VIDEO_CodingMPEG1},
+    { MEDIA_MIMETYPE_VIDEO_MSMPEG4V1, OMX_VIDEO_CodingMSMPEG4V1},
+    { MEDIA_MIMETYPE_VIDEO_MSMPEG4V2, OMX_VIDEO_CodingMSMPEG4V2},
+    { MEDIA_MIMETYPE_VIDEO_DIVX, OMX_VIDEO_CodingDIVX},
+    { MEDIA_MIMETYPE_VIDEO_XVID, OMX_VIDEO_CodingXVID},
+    { MEDIA_MIMETYPE_VIDEO_RXG2, OMX_VIDEO_CodingRXG2},
 };
 
 status_t ACodec::GetVideoCodingTypeFromMime(
@@ -6209,14 +6253,22 @@ void ACodec::BaseState::onInputBufferFilled(const sp<AMessage> &msg) {
                 info->checkReadFence("onInputBufferFilled");
 
                 status_t err2 = OK;
+
+#if 1
                 switch (metaType) {
                 case kMetadataBufferTypeInvalid:
 #ifdef CAMCORDER_GRALLOC_SOURCE
                 case kMetadataBufferTypeCameraSource:
 #endif
                     break;
+                case kMetadataBufferTypeCameraSource:
+                case kMetadataBufferTypeGrallocSource:
+                    ALOGW("do not use the metaType(%d) in androidN", metaType);
+                    break;
 #ifndef OMX_ANDROID_COMPILE_AS_32BIT_ON_64BIT_PLATFORMS
                 case kMetadataBufferTypeNativeHandleSource:
+                // we can not support this metadatatype now
+                #if 0
                     if (info->mCodecData->size() >= sizeof(VideoNativeHandleMetadata)) {
                         VideoNativeHandleMetadata *vnhmd =
                             (VideoNativeHandleMetadata*)info->mCodecData->base();
@@ -6225,6 +6277,7 @@ void ACodec::BaseState::onInputBufferFilled(const sp<AMessage> &msg) {
                                 NativeHandle::create(vnhmd->pHandle, false /* ownsHandle */),
                                 bufferID);
                     }
+                #endif
                     break;
                 case kMetadataBufferTypeANWBuffer:
                     if (info->mCodecData->size() >= sizeof(VideoNativeMetadata)) {
@@ -6243,7 +6296,7 @@ void ACodec::BaseState::onInputBufferFilled(const sp<AMessage> &msg) {
                     err2 = ERROR_UNSUPPORTED;
                     break;
                 }
-
+#endif
                 if (err2 == OK) {
                     err2 = mCodec->mOMX->emptyBuffer(
                         mCodec->mNode,
@@ -8662,7 +8715,6 @@ void ACodec::setBFrames(
         val  = frameRate * iFramesInterval - 1;
         CHECK(val > 1);
     }
-
     h264type->nPFrames = val;
 
     if (h264type->nPFrames == 0) {
@@ -8681,5 +8733,4 @@ void ACodec::setBFrames(
     }
     return;
 }
-
 }  // namespace android

@@ -1347,6 +1347,15 @@ status_t OMXNodeInstance::allocateBufferWithBackup(
 #else
     bool copy = mMetadataType[portIndex] == kMetadataBufferTypeInvalid;
 #endif
+	if((mMetadataType[portIndex] == kMetadataBufferTypeCameraSource) &&
+		!strcmp(mName, "allwinner.encoder.avc"))
+	{
+		copy = true;
+	}
+	else
+	{
+		copy = mMetadataType[portIndex] == kMetadataBufferTypeInvalid;
+	}
 
     BufferMeta *buffer_meta = new BufferMeta(
             params, portIndex,

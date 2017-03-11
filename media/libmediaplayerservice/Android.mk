@@ -18,6 +18,7 @@ LOCAL_PATH:= $(call my-dir)
 #
 
 include $(CLEAR_VARS)
+include $(LOCAL_PATH)/../libcedarx/config.mk
 
 LOCAL_SRC_FILES:=               \
     ActivityManager.cpp         \
@@ -50,6 +51,10 @@ LOCAL_SHARED_LIBRARIES :=       \
     libstagefright_wfd          \
     libutils                    \
     libvorbisidec               \
+    libawplayer                 \
+    libxplayer                  \
+    libaw_output                \
+    libawmetadataretriever      \
 
 LOCAL_STATIC_LIBRARIES :=       \
     libstagefright_nuplayer     \
@@ -72,13 +77,18 @@ LOCAL_C_INCLUDES :=                                                 \
     libcore/include                                                 \
     $(TOP)/frameworks/av/media/libavextensions                      \
     $(TOP)/frameworks/av/media/libstagefright/mpeg2ts               \
-
+    $(TOP)/frameworks/av/media/libcedarx/android_adapter/awplayer/   \
+    $(TOP)/frameworks/av/media/libcedarx/android_adapter/output/   \
+    $(TOP)/frameworks/av/media/libcedarx/android_adapter/metadataretriever/       \
+    $(TOP)/frameworks/av/media/libcedarc/include  \
 LOCAL_CFLAGS += -Werror -Wno-error=deprecated-declarations -Wall
 # DOLBY_START
 ifeq ($(strip $(DOLBY_ENABLE)),true)
     LOCAL_CFLAGS += $(dolby_cflags)
 endif
 # DOLBY_END
+
+LOCAL_CFLAGS += -Werror -Wno-error=deprecated-declarations -Wall
 LOCAL_CLANG := true
 
 LOCAL_MODULE:= libmediaplayerservice

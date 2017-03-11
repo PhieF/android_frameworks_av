@@ -3649,6 +3649,14 @@ status_t AudioFlinger::PlaybackThread::createAudioPatch_l(const struct audio_pat
         status = mOutput->stream->common.set_parameters(&mOutput->stream->common,
                 param.toString().string());
         *handle = AUDIO_PATCH_HANDLE_NONE;
+        audio_hw_device_t *hwDevice = mOutput->audioHwDev->hwDevice();
+        if (hwDevice->create_audio_patch != NULL)
+            status = hwDevice->create_audio_patch(hwDevice,
+                                               patch->num_sources,
+                                               patch->sources,
+                                               patch->num_sinks,
+                                               patch->sinks,
+                                               handle);
     }
     if (configChanged) {
         mPrevOutDevice = type;
@@ -3685,6 +3693,9 @@ status_t AudioFlinger::PlaybackThread::releaseAudioPatch_l(const audio_patch_han
         param.addInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), 0);
         status = mOutput->stream->common.set_parameters(&mOutput->stream->common,
                 param.toString().string());
+        audio_hw_device_t *hwDevice = mOutput->audioHwDev->hwDevice();
+        if (hwDevice->release_audio_patch != NULL)
+            status = hwDevice->release_audio_patch(hwDevice, handle);
     }
     return status;
 }
@@ -7785,6 +7796,14 @@ status_t AudioFlinger::RecordThread::createAudioPatch_l(const struct audio_patch
         status = mInput->stream->common.set_parameters(&mInput->stream->common,
                 param.toString().string());
         *handle = AUDIO_PATCH_HANDLE_NONE;
+        audio_hw_device_t *hwDevice = mInput->audioHwDev->hwDevice();
+        if (hwDevice->create_audio_patch != NULL)
+            status = hwDevice->create_audio_patch(hwDevice,
+                                               patch->num_sources,
+                                               patch->sources,
+                                               patch->num_sinks,
+                                               patch->sinks,
+                                               handle);
     }
 
     if (mInDevice != mPrevInDevice) {
@@ -7809,6 +7828,9 @@ status_t AudioFlinger::RecordThread::releaseAudioPatch_l(const audio_patch_handl
         param.addInt(String8(AUDIO_PARAMETER_STREAM_ROUTING), 0);
         status = mInput->stream->common.set_parameters(&mInput->stream->common,
                 param.toString().string());
+        audio_hw_device_t *hwDevice = mInput->audioHwDev->hwDevice();
+        if (hwDevice->release_audio_patch != NULL)
+            status = hwDevice->release_audio_patch(hwDevice, handle);
     }
     return status;
 }

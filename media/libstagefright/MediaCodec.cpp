@@ -2938,4 +2938,9 @@ void MediaCodec::updateBatteryStat() {
     }
 }
 
+status_t MediaCodec::setEncoderBitrate(int32_t bitrate) {
+    if(mCodec == NULL) return NO_INIT;
+    return mCodec->setEncoderBitrate(bitrate);
+}
+
 }  // namespace android

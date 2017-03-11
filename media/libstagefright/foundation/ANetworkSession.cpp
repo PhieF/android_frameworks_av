@@ -34,6 +34,8 @@
 #include <media/stagefright/foundation/ADebug.h>
 #include <media/stagefright/foundation/AMessage.h>
 #include <media/stagefright/foundation/hexdump.h>
+#include <cutils/properties.h>
+#include <netinet/ip.h>
 
 namespace android {
 
