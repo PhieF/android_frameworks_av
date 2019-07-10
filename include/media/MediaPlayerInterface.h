@@ -75,7 +75,7 @@ public:
     // callback mechanism for passing messages to MediaPlayer object
     class Listener : public RefBase {
     public:
-        virtual void notify(int msg, int ext1, int ext2, const Parcel *obj) = 0;
+        virtual void notify(int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj) = 0;
         virtual ~Listener() {}
     };
 
@@ -259,7 +259,7 @@ public:
     }
 
     void        sendEvent(int msg, int ext1=0, int ext2=0,
-                          const Parcel *obj=NULL) {
+                          const Parcel *obj=NULL, Parcel *replyObj=NULL) {
         sp<Listener> listener;
         {
             Mutex::Autolock autoLock(mNotifyLock);
@@ -267,7 +267,7 @@ public:
         }
 
         if (listener != NULL) {
-            listener->notify(msg, ext1, ext2, obj);
+            listener->notify(msg, ext1, ext2, obj, replyObj);
         }
     }
 

@@ -813,7 +813,7 @@ status_t MediaPlayer::setRetransmitEndpoint(const char* addrString,
     return OK;
 }
 
-void MediaPlayer::notify(int msg, int ext1, int ext2, const Parcel *obj)
+void MediaPlayer::notify(int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj)
 {
     ALOGV("message received msg=%d, ext1=%d, ext2=%d", msg, ext1, ext2);
     bool send = true;
@@ -924,7 +924,7 @@ void MediaPlayer::notify(int msg, int ext1, int ext2, const Parcel *obj)
     if ((listener != 0) && send) {
         Mutex::Autolock _l(mNotifyLock);
         ALOGV("callback application");
-        listener->notify(msg, ext1, ext2, obj);
+        listener->notify(msg, ext1, ext2, obj, replyObj);
         ALOGV("back from callback");
     }
 }

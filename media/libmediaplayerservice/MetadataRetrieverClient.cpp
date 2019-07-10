@@ -41,6 +41,7 @@
 #include "MetadataRetrieverClient.h"
 #include "StagefrightMetadataRetriever.h"
 #include "MediaPlayerFactory.h"
+#include "awmetadataretriever.h"
 
 namespace android {
 

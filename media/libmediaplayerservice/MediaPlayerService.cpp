@@ -1335,7 +1335,7 @@ status_t MediaPlayerService::Client::getRetransmitEndpoint(
 }
 
 void MediaPlayerService::Client::notify(
-        int msg, int ext1, int ext2, const Parcel *obj)
+        int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj)
 {
     sp<IMediaPlayerClient> c;
     sp<Client> nextClient;
@@ -1384,7 +1384,7 @@ void MediaPlayerService::Client::notify(
 
     if (c != NULL) {
         ALOGV("[%d] notify (%d, %d, %d)", mConnId, msg, ext1, ext2);
-        c->notify(msg, ext1, ext2, obj);
+        c->notify(msg, ext1, ext2, obj, replyObj);
     }
 }
 

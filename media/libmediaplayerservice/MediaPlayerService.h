@@ -357,7 +357,7 @@ private:
         void                    setDataSource_post(const sp<MediaPlayerBase>& p,
                                                    status_t status);
 
-                void            notify(int msg, int ext1, int ext2, const Parcel *obj);
+                void            notify(int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj=NULL);
 
                 pid_t           pid() const { return mPid; }
         virtual status_t        dump(int fd, const Vector<String16>& args);
@@ -416,10 +416,10 @@ private:
         public:
             Listener(const wp<Client> &client) : mClient(client) {}
             virtual ~Listener() {}
-            virtual void notify(int msg, int ext1, int ext2, const Parcel *obj) {
+            virtual void notify(int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj=NULL) {
                 sp<Client> client = mClient.promote();
                 if (client != NULL) {
-                    client->notify(msg, ext1, ext2, obj);
+                    client->notify(msg, ext1, ext2, obj, replyObj);
                 }
             }
         private:

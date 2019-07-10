@@ -195,7 +195,7 @@ enum media_track_type {
 class MediaPlayerListener: virtual public RefBase
 {
 public:
-    virtual void notify(int msg, int ext1, int ext2, const Parcel *obj) = 0;
+    virtual void notify(int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj=NULL) = 0;
 };
 
 struct IMediaHTTPService;
@@ -243,7 +243,7 @@ public:
             status_t        setLooping(int loop);
             bool            isLooping();
             status_t        setVolume(float leftVolume, float rightVolume);
-    virtual void            notify(int msg, int ext1, int ext2, const Parcel *obj = NULL);
+            void            notify(int msg, int ext1, int ext2, const Parcel *obj = NULL, Parcel *replyObj = NULL);
             status_t        invoke(const Parcel& request, Parcel *reply);
             status_t        setMetadataFilter(const Parcel& filter);
             status_t        getMetadata(bool update_only, bool apply_filter, Parcel *metadata);

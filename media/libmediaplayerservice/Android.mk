@@ -30,7 +30,7 @@ LOCAL_SRC_FILES:=               \
     RemoteDisplay.cpp           \
     StagefrightRecorder.cpp     \
     TestPlayerStub.cpp          \
-
+    SimpleMediaFormatProbe.cpp
 LOCAL_SHARED_LIBRARIES :=       \
     libbinder                   \
     libcamera_client            \
