@@ -86,7 +86,7 @@ struct ACodec : public AHierarchicalStateMachine, public CodecBase {
     virtual void signalSetParameters(const sp<AMessage> &msg);
     virtual void signalEndOfInputStream();
     virtual void signalRequestIDRFrame();
-
+    virtual status_t setEncoderBitrate(int32_t bitrate);
     // AHierarchicalStateMachine implements the message handling
     virtual void onMessageReceived(const sp<AMessage> &msg) {
         handleMessage(msg);

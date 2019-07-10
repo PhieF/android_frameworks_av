@@ -630,7 +630,7 @@ OMX_ERRORTYPE omx_vdec::component_init(OMX_STRING pName)
     else if(!strncmp((char*)m_cName, "OMX.allwinner.video.decoder.divx", OMX_MAX_STRINGNAME_SIZE))
     {
         strncpy((char*)m_cRole, "video_decoder.divx", OMX_MAX_STRINGNAME_SIZE);
-        m_eCompressionFormat      = OMX_VIDEO_CodingDIVX;
+        m_eCompressionFormat      = OMX_VIDEO_CodingDIVX2;
         m_streamInfo.eCodecFormat = VIDEO_CODEC_FORMAT_DIVX5;
     }
     else if(!strncmp((char*)m_cName, "OMX.allwinner.video.decoder.xvid", OMX_MAX_STRINGNAME_SIZE))

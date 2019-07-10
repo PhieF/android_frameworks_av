@@ -289,13 +289,13 @@ status_t FFMPEGSoftCodec::setVideoFormat(
         } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_FLV1, mime)) {
             *compressionFormat = (OMX_VIDEO_CODINGTYPE)OMX_VIDEO_CodingFLV1;
         } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_DIVX, mime)) {
-            *compressionFormat = (OMX_VIDEO_CODINGTYPE)OMX_VIDEO_CodingDIVX;
+            *compressionFormat = (OMX_VIDEO_CODINGTYPE)OMX_VIDEO_CodingDIVX2;
 #ifdef QCOM_HARDWARE
         // compressionFormat will be override later
         } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_DIVX4, mime)) {
-            *compressionFormat = (OMX_VIDEO_CODINGTYPE)OMX_VIDEO_CodingDIVX;
+            *compressionFormat = (OMX_VIDEO_CODINGTYPE)OMX_VIDEO_CodingDIVX2;
         } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_DIVX311, mime)) {
-            *compressionFormat = (OMX_VIDEO_CODINGTYPE)OMX_VIDEO_CodingDIVX;
+            *compressionFormat = (OMX_VIDEO_CODINGTYPE)OMX_VIDEO_CodingDIVX2;
 #endif
         } else if (!strcasecmp(MEDIA_MIMETYPE_VIDEO_HEVC, mime)) {
             *compressionFormat = (OMX_VIDEO_CODINGTYPE)OMX_VIDEO_CodingHEVC;

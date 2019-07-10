@@ -443,17 +443,14 @@ void SurfaceMediaSource::signalBufferReturned(MediaBuffer *buffer) {
 #endif
 
     for (size_t i = 0; i < mCurrentBuffers.size(); i++) {
-#ifdef CAMCORDER_GRALLOC_SOURCE
+#ifdef USE_kMetadataBufferTypeANWBuffer
+        if (mCurrentBuffers[i]->getNativeBuffer() == bufferHandle)
+#elif defined(CAMCORDER_GRALLOC_SOURCE)
         if (mCurrentBuffers[i]->handle == bufferHandle) {
 #else
         if ((buffer_handle_t)mCurrentBuffers[i]->getNativeBuffer() == bufferHandle) {
 #endif
 
-#ifdef USE_kMetadataBufferTypeANWBuffer
-        if (mCurrentBuffers[i]->getNativeBuffer() == bufferHandle)
-#else
-        if (mCurrentBuffers[i]->handle == bufferHandle)
-#endif
            {
             mCurrentBuffers.removeAt(i);
             foundBuffer = true;
@@ -469,15 +466,12 @@ void SurfaceMediaSource::signalBufferReturned(MediaBuffer *buffer) {
         if (mSlots[id].mGraphicBuffer == NULL) {
             continue;
         }
-
-#ifdef CAMCORDER_GRALLOC_SOURCE
+#ifdef USE_kMetadataBufferTypeANWBuffer
+        if (bufferHandle == mSlots[id].mGraphicBuffer->getNativeBuffer()) {
+#elif defined(CAMCORDER_GRALLOC_SOURCE)
         if (bufferHandle == mSlots[id].mGraphicBuffer->handle) {
 #else
         if (bufferHandle == (buffer_handle_t)mSlots[id].mGraphicBuffer->getNativeBuffer()) {
-#ifdef USE_kMetadataBufferTypeANWBuffer
-        if (bufferHandle == mSlots[id].mGraphicBuffer->getNativeBuffer()) {
-#else
-        if (bufferHandle == mSlots[id].mGraphicBuffer->handle) {
 #endif
             ALOGV("Slot %d returned, matches handle = %p", id,
                     mSlots[id].mGraphicBuffer->handle);

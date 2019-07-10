@@ -103,9 +103,7 @@ const char *MEDIA_MIMETYPE_TEXT_CEA_708 = "text/cea-708";
 const char *MEDIA_MIMETYPE_DATA_TIMED_ID3 = "application/x-id3v4";
 
 const char *MEDIA_MIMETYPE_VIDEO_FLV1 = "video/x-flv";
-const char *MEDIA_MIMETYPE_VIDEO_MJPEG = "video/x-jpeg";
 const char *MEDIA_MIMETYPE_VIDEO_RV = "video/vnd.rn-realvideo";
-const char *MEDIA_MIMETYPE_VIDEO_VC1 = "video/vc1";
 const char *MEDIA_MIMETYPE_VIDEO_FFMPEG = "video/ffmpeg";
 
 const char *MEDIA_MIMETYPE_AUDIO_PCM = "audio/x-pcm";

@@ -3375,7 +3375,7 @@ static const struct VideoCodingMapEntry {
     { MEDIA_MIMETYPE_VIDEO_MPEG2, OMX_VIDEO_CodingMPEG2 },
     { MEDIA_MIMETYPE_VIDEO_VP8, OMX_VIDEO_CodingVP8 },
     { MEDIA_MIMETYPE_VIDEO_VP9, OMX_VIDEO_CodingVP9 },
-    { MEDIA_MIMETYPE_VIDEO_DOLBY_VISION, OMX_VIDEO_CodingDolbyVision },=
+    { MEDIA_MIMETYPE_VIDEO_DOLBY_VISION, OMX_VIDEO_CodingDolbyVision },
     { MEDIA_MIMETYPE_VIDEO_WMV1, OMX_VIDEO_CodingWMV1},
     { MEDIA_MIMETYPE_VIDEO_WMV2, OMX_VIDEO_CodingWMV2},
     { MEDIA_MIMETYPE_VIDEO_VC1, OMX_VIDEO_CodingWMV},
@@ -3385,7 +3385,7 @@ static const struct VideoCodingMapEntry {
     { MEDIA_MIMETYPE_VIDEO_MPEG1, OMX_VIDEO_CodingMPEG1},
     { MEDIA_MIMETYPE_VIDEO_MSMPEG4V1, OMX_VIDEO_CodingMSMPEG4V1},
     { MEDIA_MIMETYPE_VIDEO_MSMPEG4V2, OMX_VIDEO_CodingMSMPEG4V2},
-    { MEDIA_MIMETYPE_VIDEO_DIVX, OMX_VIDEO_CodingDIVX},
+    { MEDIA_MIMETYPE_VIDEO_DIVX, OMX_VIDEO_CodingDIVX2},
     { MEDIA_MIMETYPE_VIDEO_XVID, OMX_VIDEO_CodingXVID},
     { MEDIA_MIMETYPE_VIDEO_RXG2, OMX_VIDEO_CodingRXG2},
 };
@@ -8733,4 +8733,29 @@ void ACodec::setBFrames(
     }
     return;
 }
+
+status_t ACodec::setEncoderBitrate(int32_t bitrate)
+{
+    OMX_VIDEO_CONTROLRATETYPE bitrateMode = OMX_Video_ControlRateVariable;
+    OMX_VIDEO_PARAM_BITRATETYPE bitrateType;
+    InitOMXParams(&bitrateType);
+    bitrateType.nPortIndex = kPortIndexOutput;
+
+    if(mOMX == NULL)
+        return NO_INIT;
+
+    status_t err = mOMX->getParameter(
+                    mNode, OMX_IndexParamVideoBitrate,
+                    &bitrateType, sizeof(bitrateType));
+    if (err != OK) {
+        return err;
+    }
+    bitrateType.eControlRate = bitrateMode;
+    bitrateType.nTargetBitrate = bitrate;
+    return mOMX->setParameter(
+                mNode, OMX_IndexParamVideoBitrate,
+                &bitrateType, sizeof(bitrateType));
+
+}
+
 }  // namespace android

@@ -35,7 +35,7 @@ public:
     {
     }
 
-    virtual void notify(int msg, int ext1, int ext2, const Parcel *obj)
+    virtual void notify(int msg, int ext1, int ext2, const Parcel *obj,  Parcel *replyObj)
     {
         Parcel data, reply;
         data.writeInterfaceToken(IMediaPlayerClient::getInterfaceDescriptor());
