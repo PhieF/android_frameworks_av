@@ -13,25 +13,6 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
-**
-** This file was modified by Dolby Laboratories, Inc. The portions of the
-** code that are surrounded by "DOLBY..." are copyrighted and
-** licensed separately, as follows:
-**
-**  (C) 2011-2016 Dolby Laboratories, Inc.
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**    http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-**
 */
 
 // Proxy for media player implementations
@@ -40,7 +21,6 @@
 #define LOG_TAG "MediaPlayerService"
 #include <utils/Log.h>
 
-#include <inttypes.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -101,12 +81,16 @@
 #include "HDCP.h"
 #include "HTTPBase.h"
 #include "RemoteDisplay.h"
-#ifdef DOLBY_ENABLE
-#include "DolbyMediaPlayerServiceExtImpl.h"
-#endif // DOLBY_END
 
-static const int kDumpLockRetries = 50;
-static const int kDumpLockSleepUs = 20000;
+
+/* add by Gary. start {{----------------------------------- */
+/* 2012-03-12 */
+//* add the global interfaces to control the subtitle gate  
+#define PROP_GLOBAL_SUB_GATE_KEY           "persist.mediasw.sft.sub_gate"
+#define PROP_ENABLE_GLOBAL_SUB             "enable global sub"
+#define PROP_DISABLE_GLOBAL_SUB            "disable global sub"
+#define PROP_GLOBAL_SUB_GATE_DEFAULT_VALUE  PROP_ENABLE_GLOBAL_SUB
+/* add by Gary. end   -----------------------------------}} */
 
 namespace {
 using android::media::Metadata;
@@ -289,6 +273,7 @@ static bool checkPermission(const char* permissionString) {
 // TODO: Find real cause of Audio/Video delay in PV framework and remove this workaround
 /* static */ int MediaPlayerService::AudioOutput::mMinBufferCount = 4;
 /* static */ bool MediaPlayerService::AudioOutput::mIsOnEmulator = false;
+/* static */ int MediaPlayerService::mHdmiPlugged = 0;
 
 void MediaPlayerService::instantiate() {
     defaultServiceManager()->addService(
@@ -431,32 +416,12 @@ status_t MediaPlayerService::Client::dump(int fd, const Vector<String16>& args)
     snprintf(buffer, 255, "  pid(%d), connId(%d), status(%d), looping(%s)\n",
             mPid, mConnId, mStatus, mLoop?"true": "false");
     result.append(buffer);
-
-    sp<MediaPlayerBase> p;
-    sp<AudioOutput> audioOutput;
-    bool locked = false;
-    for (int i = 0; i < kDumpLockRetries; ++i) {
-        if (mLock.tryLock() == NO_ERROR) {
-            locked = true;
-            break;
-        }
-        usleep(kDumpLockSleepUs);
-    }
-
-    if (locked) {
-        p = mPlayer;
-        audioOutput = mAudioOutput;
-        mLock.unlock();
-    } else {
-        result.append("  lock is taken, no dump from player and audio output\n");
-    }
     write(fd, result.string(), result.size());
-
-    if (p != NULL) {
-        p->dump(fd, args);
+    if (mPlayer != NULL) {
+        mPlayer->dump(fd, args);
     }
-    if (audioOutput != 0) {
-        audioOutput->dump(fd, args);
+    if (mAudioOutput != 0) {
+        mAudioOutput->dump(fd, args);
     }
     write(fd, "\n", 1);
     return NO_ERROR;
@@ -626,21 +591,17 @@ MediaPlayerService::Client::Client(
     mUID = uid;
     mRetransmitEndpointValid = false;
     mAudioAttributes = NULL;
-    mListener = new Listener(this);
 
 #if CALLBACK_ANTAGONIZER
     ALOGD("create Antagonizer");
-    mAntagonizer = new Antagonizer(mListener);
+    mAntagonizer = new Antagonizer(notify, this);
 #endif
 }
 
 MediaPlayerService::Client::~Client()
 {
     ALOGV("Client(%d) destructor pid = %d", mConnId, mPid);
-    {
-        Mutex::Autolock l(mLock);
-        mAudioOutput.clear();
-    }
+    mAudioOutput.clear();
     wp<Client> client(this);
     disconnect();
     mService->removeClient(client);
@@ -659,14 +620,15 @@ void MediaPlayerService::Client::disconnect()
         Mutex::Autolock l(mLock);
         p = mPlayer;
         mClient.clear();
-        mPlayer.clear();
     }
+
+    mPlayer.clear();
 
     // clear the notification to prevent callbacks to dead client
     // and reset the player. We assume the player will serialize
     // access to itself if necessary.
     if (p != 0) {
-        p->setNotifyCallback(0);
+        p->setNotifyCallback(0, 0);
 #if CALLBACK_ANTAGONIZER
         ALOGD("kill Antagonizer");
         mAntagonizer->kill();
@@ -682,13 +644,13 @@ void MediaPlayerService::Client::disconnect()
 sp<MediaPlayerBase> MediaPlayerService::Client::createPlayer(player_type playerType)
 {
     // determine if we have the right player type
-    sp<MediaPlayerBase> p = getPlayer();
+    sp<MediaPlayerBase> p = mPlayer;
     if ((p != NULL) && (p->playerType() != playerType)) {
         ALOGV("delete player");
         p.clear();
     }
     if (p == NULL) {
-        p = MediaPlayerFactory::createPlayer(playerType, mListener, mPid);
+        p = MediaPlayerFactory::createPlayer(playerType, this, notify, mPid);
     }
 
     if (p != NULL) {
@@ -733,20 +695,10 @@ sp<MediaPlayerBase> MediaPlayerService::Client::setDataSource_pre(
 
     sp<IServiceManager> sm = defaultServiceManager();
     sp<IBinder> binder = sm->getService(String16("media.extractor"));
-    if (binder == NULL) {
-        ALOGE("Unable to connect to media extractor service");
-        return NULL;
-    }
-
     mExtractorDeathListener = new ServiceDeathNotifier(binder, p, MEDIAEXTRACTOR_PROCESS_DEATH);
     binder->linkToDeath(mExtractorDeathListener);
 
     binder = sm->getService(String16("media.codec"));
-    if (binder == NULL) {
-        ALOGE("Unable to connect to media codec service");
-        return NULL;
-    }
-
     mCodecDeathListener = new ServiceDeathNotifier(binder, p, MEDIACODEC_PROCESS_DEATH);
     binder->linkToDeath(mCodecDeathListener);
 
@@ -780,7 +732,6 @@ void MediaPlayerService::Client::setDataSource_post(
     }
 
     if (mStatus == OK) {
-        Mutex::Autolock l(mLock);
         mPlayer = p;
     }
 }
@@ -823,6 +774,17 @@ status_t MediaPlayerService::Client::setDataSource(
             return NO_INIT;
         }
 
+        //* save properties before creating the real player 
+        p->setSubGate(mSubGate);
+        p->setSubDelay(mSubDelay);
+        p->setSubCharset(mSubCharset);
+        //* set audio channel mute
+        p->setChannelMuteMode(mMuteMode);
+
+        // aw extend. set BDFolderPlayMode before . eric_wang. 20140307.
+        p->generalInterface(MEDIAPLAYER_CMD_SET_BD_FOLDER_PLAY_MODE, mBDFolderPlayMode, 0, 0, NULL);
+        // aw extend end. store BDFolderPlayMode. eric_wang. 20140307.
+      
         setDataSource_post(p, p->setDataSource(httpService, url, headers));
         return mStatus;
     }
@@ -830,7 +792,8 @@ status_t MediaPlayerService::Client::setDataSource(
 
 status_t MediaPlayerService::Client::setDataSource(int fd, int64_t offset, int64_t length)
 {
-    ALOGV("setDataSource fd=%d, offset=%" PRId64 ", length=%" PRId64 "", fd, offset, length);
+    ALOGV("setDataSource fd=%d (%s), offset=%lld, length=%lld",
+            fd, nameForFd(fd).c_str(), (long long) offset, (long long) length);
     struct stat sb;
     int ret = fstat(fd, &sb);
     if (ret != 0) {
@@ -838,11 +801,11 @@ status_t MediaPlayerService::Client::setDataSource(int fd, int64_t offset, int64
         return UNKNOWN_ERROR;
     }
 
-    ALOGV("st_dev  = %" PRIu64 "", static_cast<uint64_t>(sb.st_dev));
+    ALOGV("st_dev  = %llu", static_cast<unsigned long long>(sb.st_dev));
     ALOGV("st_mode = %u", sb.st_mode);
     ALOGV("st_uid  = %lu", static_cast<unsigned long>(sb.st_uid));
     ALOGV("st_gid  = %lu", static_cast<unsigned long>(sb.st_gid));
-    ALOGV("st_size = %" PRId64 "", sb.st_size);
+    ALOGV("st_size = %llu", static_cast<unsigned long long>(sb.st_size));
 
     if (offset >= sb.st_size) {
         ALOGE("offset error");
@@ -850,7 +813,7 @@ status_t MediaPlayerService::Client::setDataSource(int fd, int64_t offset, int64
     }
     if (offset + length > sb.st_size) {
         length = sb.st_size - offset;
-        ALOGV("calculated length = %" PRId64 "\n", length);
+        ALOGV("calculated length = %lld", (long long)length);
     }
 
     player_type playerType = MediaPlayerFactory::getPlayerType(this,
@@ -876,8 +839,38 @@ status_t MediaPlayerService::Client::setDataSource(
         return NO_INIT;
     }
 
+    //* save properties before creating the real player 
+    p->setSubGate(mSubGate);
+    p->setSubDelay(mSubDelay);
+    p->setSubCharset(mSubCharset);
+
+    //* set audio channel mute
+    p->setChannelMuteMode(mMuteMode);
+
     // now set data source
     setDataSource_post(p, p->setDataSource(source));
+    return mStatus;
+}
+
+status_t MediaPlayerService::Client::setDataSource(
+        const sp<IStreamSource> &source, int type) {
+
+	sp<MediaPlayerBase> p = setDataSource_pre(AW_PLAYER);
+	if (p == NULL) {
+		return NO_INIT;
+	}
+
+    //* save properties before creating the real player 
+    p->setSubGate(mSubGate);
+    p->setSubDelay(mSubDelay);
+    p->setSubCharset(mSubCharset);
+    //* set audio channel mute
+    p->setChannelMuteMode(mMuteMode);
+
+    setDataSource_post(p, p->setDataSource(source));
+
+    generalInterface(MEDIAPLAYER_CMD_SET_STREAMING_TYPE, type, 0, 0, NULL);
+
     return mStatus;
 }
 
@@ -889,6 +882,14 @@ status_t MediaPlayerService::Client::setDataSource(
     if (p == NULL) {
         return NO_INIT;
     }
+	//* save properties before creating the real player 
+    p->setSubGate(mSubGate);
+    p->setSubDelay(mSubDelay);
+    p->setSubCharset(mSubCharset);
+
+    //* set audio channel mute
+    p->setChannelMuteMode(mMuteMode);
+	
     // now set data source
     setDataSource_post(p, p->setDataSource(dataSource));
     return mStatus;
@@ -1285,6 +1286,244 @@ status_t MediaPlayerService::Client::getParameter(int key, Parcel *reply) {
     return p->getParameter(key, reply);
 }
 
+/* add by Gary. start {{----------------------------------- */
+/* 2011-9-15 15:41:36 */
+/* expend interfaces about subtitle, track and so on */
+status_t MediaPlayerService::Client::setSubGate(bool showSub)
+{
+    ALOGV("MediaPlayerService::Client::setSubGate(): showSub = %d", showSub);
+    mSubGate = showSub;
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) 
+        return OK;
+    return p->setSubGate(showSub);
+}
+
+bool MediaPlayerService::Client::getSubGate()
+{
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) 
+        return true;
+    return p->getSubGate();
+}
+
+status_t MediaPlayerService::Client::setSubCharset(const char *charset)
+{
+    strcpy(mSubCharset, charset);
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) 
+        return OK;
+    return p->setSubCharset(charset);
+}
+
+status_t MediaPlayerService::Client::getSubCharset(char *charset)
+{
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) 
+        return UNKNOWN_ERROR;
+    return p->getSubCharset(charset);
+}
+
+status_t MediaPlayerService::Client::setSubDelay(int time)
+{
+    mSubDelay = time;
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) 
+        return OK;
+    return p->setSubDelay(time);
+}
+
+int MediaPlayerService::Client::getSubDelay()
+{
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) 
+        return 0;
+    return p->getSubDelay();
+}
+/* add by Gary. end   -----------------------------------}} */
+
+
+/* add by Gary. start {{----------------------------------- */
+/* 2011-11-14 */
+/* support scale mode */
+status_t MediaPlayerService::Client::enableScaleMode(bool enable, int width, int height)
+{
+    mEnableScaleMode = enable;
+    mScaleWidth = width;
+    mScaleHeight = height;
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) 
+        return UNKNOWN_ERROR;
+    return p->enableScaleMode(enable, width, height);
+}
+/* add by Gary. end   -----------------------------------}} */
+
+//* set audio channel mute 
+status_t MediaPlayerService::Client::setChannelMuteMode(int muteMode)
+{
+    mMuteMode = muteMode;
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) 
+        return OK;
+    return p->setChannelMuteMode(muteMode);
+}
+
+int MediaPlayerService::Client::getChannelMuteMode()
+{
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) 
+        return -1;
+    return p->getChannelMuteMode();
+}
+
+status_t MediaPlayerService::Client::getMediaPlayerInfo( struct MediaPlayerInfo* mediaPlayerInfo) 
+{
+    sp<MediaPlayerBase> p = getPlayer();
+    if (p == 0) return UNKNOWN_ERROR;
+
+	p->getMediaPlayerInfo(mediaPlayerInfo);
+	
+	if ((p->isPlaying()) && (p->getMeidaPlayerState() != PLAYER_STATE_SUSPEND))
+	{
+	    mediaPlayerInfo->playState = 1;
+	}else {
+	    mediaPlayerInfo->playState = 0;
+	}
+	
+    return NO_ERROR;
+}
+
+//* add the global interfaces to control the subtitle gate  
+status_t MediaPlayerService::setGlobalSubGate(bool showSub)
+{
+    ALOGV("MediaPlayerService::setGlobalSubGate(): enable = %d", showSub);
+    if( showSub == mGlobalSubGate )
+        return OK;
+        
+    status_t ret = OK;
+    for (int i = 0, n = mClients.size(); i < n; ++i) {
+        sp<Client> c = mClients[i].promote();
+        if (c != 0) {
+            status_t temp = c->setSubGate(showSub);
+            if( temp != OK )
+                ret = temp;
+        }
+    }
+    
+    mGlobalSubGate = showSub;
+    
+    if(mGlobalSubGate)
+        property_set(PROP_GLOBAL_SUB_GATE_KEY, PROP_ENABLE_GLOBAL_SUB);
+    else
+        property_set(PROP_GLOBAL_SUB_GATE_KEY, PROP_DISABLE_GLOBAL_SUB);
+    char prop_value[PROPERTY_VALUE_MAX];
+    property_get(PROP_GLOBAL_SUB_GATE_KEY, prop_value, "no showSub");
+
+    return ret;
+}
+
+bool MediaPlayerService::getGlobalSubGate()
+{
+    return mGlobalSubGate;
+}
+
+status_t MediaPlayerService::getMediaPlayerList() 
+{
+   ALOGV("getMediaPlayerList");
+   status_t ret = 0;
+   ret = mClients.size();
+    
+   return ret;
+}
+
+status_t MediaPlayerService::getMediaPlayerInfo(int mediaPlayerId, 
+	                                  struct MediaPlayerInfo* mediaPlayerInfo) 
+{
+	ALOGV("getMediaPlayerInfo mClients[%d]", mediaPlayerId);
+
+	
+	mediaPlayerInfo->height = 0;
+	mediaPlayerInfo->width = 0;
+	mediaPlayerInfo->codecType = 0;
+	mediaPlayerInfo->playState = 0;
+	
+	if ((mClients.size() > 0) && (mediaPlayerId >= 0) && ((size_t)mediaPlayerId < mClients.size()))
+	{
+	    for (int i = 0, n = mClients.size(); i < n; ++i) {
+	        sp<Client> c = mClients[i].promote();
+	        if (c != 0) {
+				if (i == mediaPlayerId)
+				{
+	                c->getMediaPlayerInfo(mediaPlayerInfo);
+					return OK;
+				}
+	        }
+	    }
+	}
+	return NO_ERROR;
+}
+
+//* add two general interfaces for expansibility 
+status_t MediaPlayerService::generalGlobalInterface(int cmd, int int1, int int2, int int3, void *p)
+{
+    switch(cmd){
+        case MEDIAPLAYER_GLOBAL_CMD_TEST:{
+            ALOGD("MEDIAPLAYER_GLOBAL_CMD_TEST: int1 = %d", int1);
+            *((int *)p) = 111;
+            ALOGD("*p = %d", *((int *)p));
+        }break;
+		case MEDIAPLAYER_CMD_IS_ROTATABLE:{
+			ALOGD("MEDIAPLAYER_CMD_IS_ROTATABLE...");
+		}break;
+		case MEDIAPLAYER_CMD_SET_ROTATION:{
+			status_t ret = OK;
+            if(1 == mHdmiPlugged)
+            {
+                ALOGD("(f:%s, l:%d)hdmi state is [%d], don't tell vdeclib rotate!", __FUNCTION__, __LINE__, mHdmiPlugged);
+                return ret;
+            }
+			for (int i = 0, n = mClients.size(); i < n; ++i) {
+				sp<Client> c = mClients[i].promote();
+				if (c != 0) {
+					status_t temp = c->generalInterface(MEDIAPLAYER_CMD_SET_ROTATION, int1, int2, int3, p);
+					if( temp != OK )
+						ret = temp;
+				}
+			}
+			return ret;
+		}break;
+        case MEDIAPLAYER_CMD_SET_HDMISTATE:{
+            ALOGD("(f:%s, l:%d)hdmi state is [%d]", __FUNCTION__, __LINE__, int1);
+            mHdmiPlugged = int1;
+        }break;
+        default:{
+            ALOGW("cmd %d is NOT defined.", cmd);
+        }break;
+    }
+    return OK;
+}
+
+status_t MediaPlayerService::Client::generalInterface(int cmd, int int1, int int2, int int3, void *p)
+{
+    sp<MediaPlayerBase> mp = getPlayer();
+    if(cmd == MEDIAPLAYER_CMD_SET_BD_FOLDER_PLAY_MODE)
+    {
+        mBDFolderPlayMode = int1;
+    }
+    if (mp == 0) 
+        return UNKNOWN_ERROR;
+
+    ALOGD("generalInterface cmd=%d int1=%d int2=%d",cmd, int1, int2);
+    if(cmd == MEDIAPLAYER_CMD_RELEASE_SURFACE_BYHAND) {
+        //disconnectNativeWindow();
+        //IPCThreadState::self()->flushCommands();
+	    ALOGD("RELEASE_SURFACE_BYHAND not implement now");
+        return OK;
+    }
+
+    return mp->generalInterface(cmd, int1, int2, int3, p);
+}
+
 status_t MediaPlayerService::Client::setRetransmitEndpoint(
         const struct sockaddr_in* endpoint) {
 
@@ -1335,36 +1574,24 @@ status_t MediaPlayerService::Client::getRetransmitEndpoint(
 }
 
 void MediaPlayerService::Client::notify(
-        int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj)
+        void* cookie, int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj)
 {
-    sp<IMediaPlayerClient> c;
-    sp<Client> nextClient;
-    status_t errStartNext = NO_ERROR;
-    {
-        Mutex::Autolock l(mLock);
-        c = mClient;
-        if (msg == MEDIA_PLAYBACK_COMPLETE && mNextClient != NULL) {
-            nextClient = mNextClient;
-
-            if (mAudioOutput != NULL)
-                mAudioOutput->switchToNextOutput();
-
-            errStartNext = nextClient->start();
-        }
+    Client* client = static_cast<Client*>(cookie);
+    if (client == NULL) {
+        return;
     }
 
-    if (nextClient != NULL) {
-        sp<IMediaPlayerClient> nc;
-        {
-            Mutex::Autolock l(nextClient->mLock);
-            nc = nextClient->mClient;
-        }
-        if (nc != NULL) {
-            if (errStartNext == NO_ERROR) {
-                nc->notify(MEDIA_INFO, MEDIA_INFO_STARTED_AS_NEXT, 0, obj);
-            } else {
-                nc->notify(MEDIA_ERROR, MEDIA_ERROR_UNKNOWN , 0, obj);
-                ALOGE("gapless:start playback for next track failed, err(%d)", errStartNext);
+    sp<IMediaPlayerClient> c;
+    {
+        Mutex::Autolock l(client->mLock);
+        c = client->mClient;
+        if (msg == MEDIA_PLAYBACK_COMPLETE && client->mNextClient != NULL) {
+            if (client->mAudioOutput != NULL)
+                client->mAudioOutput->switchToNextOutput();
+            client->mNextClient->start();
+            if (client->mNextClient->mClient != NULL) {
+                client->mNextClient->mClient->notify(
+                        MEDIA_INFO, MEDIA_INFO_STARTED_AS_NEXT, 0, obj);
             }
         }
     }
@@ -1373,17 +1600,17 @@ void MediaPlayerService::Client::notify(
         MEDIA_INFO_METADATA_UPDATE == ext1) {
         const media::Metadata::Type metadata_type = ext2;
 
-        if(shouldDropMetadata(metadata_type)) {
+        if(client->shouldDropMetadata(metadata_type)) {
             return;
         }
 
         // Update the list of metadata that have changed. getMetadata
         // also access mMetadataUpdated and clears it.
-        addNewMetadataUpdate(metadata_type);
+        client->addNewMetadataUpdate(metadata_type);
     }
 
     if (c != NULL) {
-        ALOGV("[%d] notify (%d, %d, %d)", mConnId, msg, ext1, ext2);
+        ALOGV("[%d] notify (%p, %d, %d, %d)", client->mConnId, cookie, msg, ext1, ext2);
         c->notify(msg, ext1, ext2, obj, replyObj);
     }
 }
@@ -1415,8 +1642,8 @@ void MediaPlayerService::Client::addNewMetadataUpdate(media::Metadata::Type meta
 #if CALLBACK_ANTAGONIZER
 const int Antagonizer::interval = 10000; // 10 msecs
 
-Antagonizer::Antagonizer(const sp<MediaPlayerBase::Listener> &listener) :
-    mExit(false), mActive(false), mListener(listener)
+Antagonizer::Antagonizer(notify_callback_f cb, void* client) :
+    mExit(false), mActive(false), mClient(client), mCb(cb)
 {
     createThread(callbackThread, this);
 }
@@ -1436,7 +1663,7 @@ int Antagonizer::callbackThread(void* user)
     while (!p->mExit) {
         if (p->mActive) {
             ALOGV("send event");
-            p->mListener->notify(0, 0, 0, 0);
+            p->mCb(p->mClient, 0, 0, 0);
         }
         usleep(interval);
     }
@@ -1480,9 +1707,6 @@ MediaPlayerService::AudioOutput::AudioOutput(audio_session_t sessionId, int uid,
     }
 
     setMinBufferCount();
-#ifdef DOLBY_ENABLE
-    mProcessedAudio = false;
-#endif // DOLBY_END
 }
 
 MediaPlayerService::AudioOutput::~AudioOutput()
@@ -1615,11 +1839,7 @@ int64_t MediaPlayerService::AudioOutput::getPlayedOutDurationUs(int64_t nowUs) c
         //        numFramesPlayed, (long long)numFramesPlayedAt);
     } else {                         // case 3: transitory at new track or audio fast tracks.
         res = mTrack->getPosition(&numFramesPlayed);
-        if (res != OK) {
-            // return with invalid duration to indicate playback position should
-            // be queried from MediaClock using system clock
-            return -1;
-        }
+        CHECK_EQ(res, (status_t)OK);
         numFramesPlayedAt = nowUs;
         numFramesPlayedAt += 1000LL * mTrack->latency() / 2; /* XXX */
         //ALOGD("getPosition: %u %lld", numFramesPlayed, (long long)numFramesPlayedAt);
@@ -1660,9 +1880,6 @@ status_t MediaPlayerService::AudioOutput::getFramesWritten(uint32_t *frameswritt
 status_t MediaPlayerService::AudioOutput::setParameters(const String8& keyValuePairs)
 {
     Mutex::Autolock lock(mLock);
-#ifdef DOLBY_ENABLE
-    setDolbyParameters(keyValuePairs);
-#endif // DOLBY_END
     if (mTrack == 0) return NO_INIT;
     return mTrack->setParameters(keyValuePairs);
 }
@@ -1694,12 +1911,6 @@ void MediaPlayerService::AudioOutput::setAudioStreamType(audio_stream_type_t str
     // do not allow direct stream type modification if attributes have been set
     if (mAttributes == NULL) {
         mStreamType = streamType;
-        // No attributes are set, for mediaPlayer playback, force populate attributes
-        // This is done to ensure that we qualify for a direct output
-        mAttributes = (audio_attributes_t *) calloc(1, sizeof(audio_attributes_t));
-        if (mAttributes != NULL) {
-            stream_type_to_audio_attributes(mStreamType, mAttributes);
-        }
     }
 }
 
@@ -1764,18 +1975,6 @@ status_t MediaPlayerService::AudioOutput::open(
             ((cb == NULL) || (offloadInfo == NULL))) {
         return BAD_VALUE;
     }
-
-    // Attributes if still NULL indicate that the application did not even set the
-    // stream type, hence populating attributes based on default stream type.
-    if (mAttributes == NULL) {
-        // For mediaPlayer playback, force populate attributes
-        // This is done to ensure that we qualify for a direct output
-        mAttributes = (audio_attributes_t *) calloc(1, sizeof(audio_attributes_t));
-        if (mAttributes != NULL) {
-            stream_type_to_audio_attributes(mStreamType, mAttributes);
-        }
-    }
-
 
     // compute frame count for the AudioTrack internal buffer
     size_t frameCount;
@@ -1943,13 +2142,6 @@ status_t MediaPlayerService::AudioOutput::open(
                       mRecycledTrack->frameCount(), t->frameCount());
                 reuse = false;
             }
-            // If recycled and new tracks are not on the same output,
-            // don't reuse the recycled one.
-            if (mRecycledTrack->getOutput() != t->getOutput()) {
-                ALOGV("effect chain if exists has already moved to new output, \
-                        giving up reusing recycled track.");
-                reuse = false;
-            }
         }
 
         if (reuse) {
@@ -1961,9 +2153,6 @@ status_t MediaPlayerService::AudioOutput::open(
                 mCallbackData->setOutput(this);
             }
             delete newcbd;
-#ifdef DOLBY_ENABLE
-            updateTrackOnAudioProcessed(mTrack, reuse);
-#endif // DOLBY_END
             return updateTrack();
         }
     }
@@ -2005,9 +2194,6 @@ status_t MediaPlayerService::AudioOutput::updateTrack() {
             res = mTrack->attachAuxEffect(mAuxEffectId);
         }
     }
-#ifdef DOLBY_ENABLE
-    updateTrackOnAudioProcessed(mTrack, false);
-#endif // DOLBY_END
     ALOGV("updateTrack() DONE status %d", res);
     return res;
 }

@@ -13,25 +13,6 @@
 ** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 ** See the License for the specific language governing permissions and
 ** limitations under the License.
-**
-** This file was modified by Dolby Laboratories, Inc. The portions of the
-** code that are surrounded by "DOLBY..." are copyrighted and
-** licensed separately, as follows:
-**
-**  (C) 2011-2016 Dolby Laboratories, Inc.
-**
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**    http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
-**
 */
 
 #ifndef ANDROID_MEDIAPLAYERSERVICE_H
@@ -68,7 +49,7 @@ class MediaRecorderClient;
 #if CALLBACK_ANTAGONIZER
 class Antagonizer {
 public:
-    Antagonizer(const sp<MediaPlayerBase::Listener> &listener);
+    Antagonizer(notify_callback_f cb, void* client);
     void start() { mActive = true; }
     void stop() { mActive = false; }
     void kill();
@@ -76,11 +57,12 @@ private:
     static const int interval;
     Antagonizer();
     static int callbackThread(void* cookie);
-    Mutex                         mLock;
-    Condition                     mCondition;
-    bool                          mExit;
-    bool                          mActive;
-    sp<MediaPlayerBase::Listener> mListener;
+    Mutex               mLock;
+    Condition           mCondition;
+    bool                mExit;
+    bool                mActive;
+    void*               mClient;
+    notify_callback_f   mCb;
 };
 #endif
 
@@ -153,11 +135,6 @@ class MediaPlayerService : public BnMediaPlayerService
                 int event, void *me, void *info);
                void             deleteRecycledTrack_l();
                void             close_l();
-#ifdef DOLBY_ENABLE
-               void             setDolbyParameters(const String8& keyValuePairs);
-               void             updateTrackOnAudioProcessed(sp<AudioTrack> t, bool trackReused);
-               bool             mProcessedAudio;
-#endif // DOLBY_END
            status_t             updateTrack();
 
         sp<AudioTrack>          mTrack;
@@ -228,6 +205,7 @@ class MediaPlayerService : public BnMediaPlayerService
         };
 
     }; // AudioOutput
+
 
 public:
     static  void                instantiate();
@@ -303,6 +281,19 @@ public:
     virtual void                addBatteryData(uint32_t params);
     // API for the Battery app to pull the data of codecs usage
     virtual status_t            pullBatteryData(Parcel* reply);
+    /* add by Gary. start {{----------------------------------- */
+    /* 2012-03-12 */
+    /* add the global interfaces to control the subtitle gate  */
+    virtual status_t            setGlobalSubGate(bool showSub);
+    virtual bool                getGlobalSubGate();
+    /* add by Gary. end   -----------------------------------}} */
+	/* add by Gary. start {{----------------------------------- */
+    /* 2012-4-24 */
+    /* add two general interfaces for expansibility */
+    virtual status_t            generalGlobalInterface(int cmd, int int1, int int2, int int3, void *p);
+    /* add by Gary. end   -----------------------------------}} */
+	virtual  status_t		 getMediaPlayerList();
+    virtual  status_t		 getMediaPlayerInfo(int mediaPlayerId, struct MediaPlayerInfo* mediaPlayerInfo);
 private:
 
     class Client : public BnMediaPlayer {
@@ -339,6 +330,37 @@ private:
         virtual status_t        setRetransmitEndpoint(const struct sockaddr_in* endpoint);
         virtual status_t        getRetransmitEndpoint(struct sockaddr_in* endpoint);
         virtual status_t        setNextPlayer(const sp<IMediaPlayer>& player);
+        /* add by Gary. start {{----------------------------------- */
+        /* expend interfaces about subtitle, track and so on */
+        virtual status_t        setSubGate(bool showSub);
+        virtual bool            getSubGate();
+        virtual status_t        setSubCharset(const char *charset);
+        virtual status_t        getSubCharset(char *charset);
+        virtual status_t        setSubDelay(int time);
+        virtual int             getSubDelay();
+		/* add by Gary. end   -----------------------------------}} */
+
+        /* add by Gary. start {{----------------------------------- */
+        /* 2011-11-14 */
+        /* support scale mode */
+        virtual status_t        enableScaleMode(bool enable, int width, int height);
+        /* add by Gary. end   -----------------------------------}} */
+        /* add by Gary. start {{----------------------------------- */
+        /* 2012-03-07 */
+        /* set audio channel mute */
+        virtual status_t        setChannelMuteMode(int muteMode);
+        virtual int             getChannelMuteMode();
+        /* add by Gary. end   -----------------------------------}} */
+
+        /* add by Gary. start {{----------------------------------- */
+        /* 2012-4-24 */
+        /* add two general interfaces for expansibility */
+        virtual status_t        generalInterface(int cmd, int int1, int int2, int int3, void *p);
+        /* add by Gary. end   -----------------------------------}} */
+		/* add by aw. start   -----------------------------------}} */
+		virtual  status_t		getMediaPlayerInfo(struct MediaPlayerInfo* mediaPlayerInfo);
+        virtual status_t        setDataSource(const sp<IStreamSource> &source, int type);
+		/* add by aw. end   -----------------------------------}} */
 
         sp<MediaPlayerBase>     createPlayer(player_type playerType);
 
@@ -357,7 +379,8 @@ private:
         void                    setDataSource_post(const sp<MediaPlayerBase>& p,
                                                    status_t status);
 
-                void            notify(int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj=NULL);
+        static  void            notify(void* cookie, int msg,
+                                       int ext1, int ext2, const Parcel *obj, Parcel *replyObj=NULL);
 
                 pid_t           pid() const { return mPid; }
         virtual status_t        dump(int fd, const Vector<String16>& args);
@@ -412,39 +435,50 @@ private:
 
         status_t setAudioAttributes_l(const Parcel &request);
 
-        class Listener : public MediaPlayerBase::Listener {
-        public:
-            Listener(const wp<Client> &client) : mClient(client) {}
-            virtual ~Listener() {}
-            virtual void notify(int msg, int ext1, int ext2, const Parcel *obj, Parcel *replyObj=NULL) {
-                sp<Client> client = mClient.promote();
-                if (client != NULL) {
-                    client->notify(msg, ext1, ext2, obj, replyObj);
-                }
-            }
-        private:
-            wp<Client> mClient;
-        };
+        mutable     Mutex                       mLock;
+                    sp<MediaPlayerBase>         mPlayer;
+                    sp<MediaPlayerService>      mService;
+                    sp<IMediaPlayerClient>      mClient;
+                    sp<AudioOutput>             mAudioOutput;
+                    pid_t                       mPid;
+                    status_t                    mStatus;
+                    bool                        mLoop;
+                    int32_t                     mConnId;
+                    audio_session_t             mAudioSessionId;
+                    audio_attributes_t *        mAudioAttributes;
+                    uid_t                       mUID;
+                    sp<ANativeWindow>           mConnectedWindow;
+                    sp<IBinder>                 mConnectedWindowBinder;
+                    struct sockaddr_in          mRetransmitEndpoint;
+                    bool                        mRetransmitEndpointValid;
+                    sp<Client>                  mNextClient;
 
-        mutable     Mutex                         mLock;
-                    sp<MediaPlayerBase>           mPlayer;
-                    sp<MediaPlayerService>        mService;
-                    sp<IMediaPlayerClient>        mClient;
-                    sp<AudioOutput>               mAudioOutput;
-                    pid_t                         mPid;
-                    status_t                      mStatus;
-                    bool                          mLoop;
-                    int32_t                       mConnId;
-                    audio_session_t               mAudioSessionId;
-                    audio_attributes_t *          mAudioAttributes;
-                    uid_t                         mUID;
-                    sp<ANativeWindow>             mConnectedWindow;
-                    sp<IBinder>                   mConnectedWindowBinder;
-                    struct sockaddr_in            mRetransmitEndpoint;
-                    bool                          mRetransmitEndpointValid;
-                    sp<Client>                    mNextClient;
-                    sp<MediaPlayerBase::Listener> mListener;
+                    /* add by Gary. start {{----------------------------------- */
+                    int                         mHasSurface;
+                    int 						mMsg; //add by lszhang for play during<1 song
+                    /* add by Gary. end   -----------------------------------}} */
 
+                    /* add by Gary. start {{----------------------------------- */
+                    /* 2011-9-28 16:28:24 */
+                    /* save properties before creating the real player */
+                    bool                        mSubGate;
+                    int                         mSubDelay;
+                    char                        mSubCharset[MEDIAPLAYER_NAME_LEN_MAX];
+                    int                         mMuteMode;   // 2012-03-07, set audio channel mute
+                    /* add by Gary. end   -----------------------------------}} */
+
+                    /* add by Gary. start {{----------------------------------- */
+                    /* 2011-11-14 */
+                    /* support scale mode */
+                    bool                        mEnableScaleMode;
+                    int                         mScaleWidth;
+                    int                         mScaleHeight;
+                    /* add by Gary. end   -----------------------------------}} */
+
+
+                    // aw extend. store BDFolderPlayMode. eric_wang. 20140307.
+                    int  mBDFolderPlayMode;  //true: BD folder play. false:normal play.
+                    // aw extend end. store BDFolderPlayMode. eric_wang. 20140307.
         // Metadata filters.
         media::Metadata::Filter mMetadataAllow;  // protected by mLock
         media::Metadata::Filter mMetadataDrop;  // protected by mLock
@@ -458,7 +492,7 @@ private:
         sp<IBinder::DeathRecipient> mExtractorDeathListener;
         sp<IBinder::DeathRecipient> mCodecDeathListener;
 #if CALLBACK_ANTAGONIZER
-                    Antagonizer*                  mAntagonizer;
+                    Antagonizer*                mAntagonizer;
 #endif
     }; // Client
 

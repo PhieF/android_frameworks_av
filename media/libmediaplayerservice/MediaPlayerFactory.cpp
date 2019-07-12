@@ -33,7 +33,6 @@
 
 #include "TestPlayerStub.h"
 #include "nuplayer/NuPlayerDriver.h"
-#include <mediaplayerservice/AVMediaServiceExtensions.h>
 
 #include "SimpleMediaFormatProbe.h"
 #include "awplayer.h"
@@ -370,12 +369,14 @@ player_type MediaPlayerFactory::getPlayerType(const sp<IMediaPlayer>& /*client*/
 #if 0
     GET_PLAYER_TYPE_IMPL(client, url);
 #endif
+
 }
 
 player_type MediaPlayerFactory::getPlayerType(const sp<IMediaPlayer>& /*client*/,
                                               int fd,
                                               int64_t offset,
                                               int64_t length) {
+
 #if 0
     GET_PLAYER_TYPE_IMPL(client, fd, offset, length);
 #else
@@ -400,7 +401,8 @@ player_type MediaPlayerFactory::getPlayerType(const sp<IMediaPlayer>& /*client*/
 
 sp<MediaPlayerBase> MediaPlayerFactory::createPlayer(
         player_type playerType,
-        const sp<MediaPlayerBase::Listener> &listener,
+        void* cookie,
+        notify_callback_f notifyFunc,
         pid_t pid) {
     sp<MediaPlayerBase> p;
     IFactory* factory;
@@ -425,7 +427,7 @@ sp<MediaPlayerBase> MediaPlayerFactory::createPlayer(
 
     init_result = p->initCheck();
     if (init_result == NO_ERROR) {
-        p->setNotifyCallback(listener);
+        p->setNotifyCallback(cookie, notifyFunc);
     } else {
         ALOGE("Failed to create player object of type %d, initCheck failed"
               " (res = %d)", playerType, init_result);
@@ -546,10 +548,7 @@ class TPlayerFactory : public MediaPlayerFactory::IFactory {
     }
 };
 #endif
-
 void MediaPlayerFactory::registerBuiltinFactories() {
-
-    MediaPlayerFactory::IFactory* pCustomFactory = NULL;
     Mutex::Autolock lock_(&sLock);
 
     if (sInitComplete)
@@ -560,11 +559,6 @@ void MediaPlayerFactory::registerBuiltinFactories() {
 //	registerFactory_l(new TPlayerFactory(), THUMBNAIL_PLAYER);
     registerFactory_l(new NuPlayerFactory(), NU_PLAYER);
     registerFactory_l(new TestPlayerFactory(), TEST_PLAYER);
-    AVMediaServiceUtils::get()->getDashPlayerFactory(pCustomFactory, DASH_PLAYER);
-    if(pCustomFactory != NULL) {
-        ALOGV("Registering DASH_PLAYER");
-        registerFactory_l(pCustomFactory, DASH_PLAYER);
-    }
 
     sInitComplete = true;
 }
